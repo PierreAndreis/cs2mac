@@ -1,0 +1,4 @@
+LIBRARY gptk.dll
+EXPORTS
+    __wine_unix_call
+    NtQueryVirtualMemory = ntdll.NtQueryVirtualMemory

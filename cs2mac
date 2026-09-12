@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# cs2mac: run Counter-Strike 2 on Apple Silicon through Wine + Metal.
+#
+#   cs2mac setup                      fetch and build everything (scripts/setup.sh)
+#   cs2mac steam [-login user]        start Steam inside the prefix (installs CS2 from there)
+#   cs2mac play  [backend] [WxH]      launch CS2 (default backend: d3dmetal, 1280x720 windowed)
+#   cs2mac bench [backend|all] [secs] [WxH]
+#                                     benchmark on the de_dust2 workshop map, results in build/bench
+#   cs2mac backend [name]             show or switch the D3D11 backend (wined3d | dxvk | d3dmetal)
+#   cs2mac status                     what is installed, running and selected
+#   cs2mac stop                       kill CS2, Steam and the wineserver
+#
+# Backends: d3dmetal (Apple D3DMetal through the gptk shim, fastest), dxvk (DXVK 1.10 -> MoltenVK),
+# vulkan (CS2's own -vulkan renderer -> MoltenVK), wined3d (stock Wine, OpenGL, very slow).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/scripts/env.sh"
+DEFAULT_BACKEND="${CS2MAC_BACKEND_DEFAULT:-d3dmetal}"
+
+steam_running() { pgrep -f "steam.exe" >/dev/null 2>&1; }
+prefix_backend() {
+    if [ -f "$WINE_ROOT/lib/wine/x86_64-windows/d3d11.dll.wine11" ]; then echo d3dmetal
+    elif "$WINE" reg query 'HKCU\Software\Wine\DllOverrides' /v d3d11 2>/dev/null | grep -q native; then echo dxvk
+    else echo wined3d; fi
+}
+select_backend() { # backend name as the game sees it
+    case "$1" in
+        vulkan) [ "$(prefix_backend)" = wined3d ] || bash "$ROOT/scripts/backend.sh" wined3d >/dev/null ;;
+        dxvk|d3dmetal|wined3d) [ "$(prefix_backend)" = "$1" ] || bash "$ROOT/scripts/backend.sh" "$1" >/dev/null ;;
+        *) echo "unknown backend '$1' (vulkan | dxvk | d3dmetal | wined3d)" >&2; exit 2 ;;
+    esac
+}
+need_steam() {
+    steam_running && return
+    echo "Steam is not running. Start it with: ./cs2mac steam" >&2; exit 1
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  setup) exec bash "$ROOT/scripts/setup.sh" "$@" ;;
+  steam)
+    [ -f "$STEAM_DIR/steam.exe" ] || { echo "Steam not installed, run ./cs2mac setup" >&2; exit 1; }
+    steam_running && { echo "Steam already running"; exit 0; }
+    # Steam's CEF UI falls back to software rendering under Wine and sometimes stays black on the
+    # first launch; passing -login on the command line skips the login window, and the store/library
+    # pages render once the client is logged in. Extra args are passed through (e.g. -login user).
+    mkdir -p "$ROOT/build/logs"
+    (cd "$STEAM_DIR" && nohup "$WINE" steam.exe -silent -noverifyfiles "$@" > "$ROOT/build/logs/steam.log" 2>&1 &)
+    echo "Steam starting (log: build/logs/steam.log). Install Counter-Strike 2 from the library." ;;
+  play)
+    b="${1:-$DEFAULT_BACKEND}"; res="${2:-1280x720}"; shift $(( $# > 2 ? 2 : $# ))
+    need_steam; select_backend "$b"
+    CS2MAC_BACKEND="$b" CS2MAC_WIDTH="${res%x*}" CS2MAC_HEIGHT="${res#*x}" exec "$ROOT/scripts/run-cs2.sh" "$@" ;;
+  bench)
+    b="${1:-$DEFAULT_BACKEND}"; secs="${2:-120}"; res="${3:-1280x720}"
+    need_steam
+    [ "$b" = all ] && list=(d3dmetal dxvk vulkan) || list=("$b")
+    for x in "${list[@]}"; do select_backend "$x"; bash "$ROOT/scripts/bench.sh" "$x" "$secs" "$res"; done
+    echo "results: build/bench/*.txt" ;;
+  backend)
+    [ $# -gt 0 ] && select_backend "$1"
+    bash "$ROOT/scripts/backend.sh" status ;;
+  status)
+    echo "wine:      $([ -x "$WINE" ] && "$WINE" --version 2>/dev/null || echo missing)"
+    echo "prefix:    $WINEPREFIX $([ -f "$WINEPREFIX/system.reg" ] && echo ok || echo missing)"
+    echo "gptk:      $([ -d "$GPTK_LIB" ] && echo installed || echo 'not installed (d3dmetal unavailable)')"
+    echo "gptk shim: $([ -f "$ROOT/build/d3dmetal/gptk.dll" ] && echo built || echo 'not built')"
+    echo "steam:     $([ -f "$STEAM_DIR/steam.exe" ] && echo installed || echo missing), $(steam_running && echo running || echo stopped)"
+    echo "cs2:       $([ -f "$CS2_DIR/game/bin/win64/cs2.exe" ] && echo installed || echo 'not installed (install from Steam)')"
+    echo "backend:   $(prefix_backend) in prefix (default for play/bench: $DEFAULT_BACKEND)" ;;
+  stop)
+    pkill -9 -f "^cs2.exe" 2>/dev/null || true
+    pkill -f "steam.exe" 2>/dev/null || true
+    "$WINESERVER" -k 2>/dev/null || true
+    echo stopped ;;
+  help|-h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "unknown command '$cmd'; try ./cs2mac help" >&2; exit 2 ;;
+esac

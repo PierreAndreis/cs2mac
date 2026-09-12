@@ -1,0 +1,12 @@
+downloads/
+vendor/
+build/
+.build/
+*.log
+.DS_Store
+bench/results/*.trace
+.env
+*.secret
+scripts/fpsread
+scripts/winshot
+scripts/winlist

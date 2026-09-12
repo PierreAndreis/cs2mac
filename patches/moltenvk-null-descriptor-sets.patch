@@ -1,0 +1,30 @@
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
+index 7d16b94..26d3be8 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
+@@ -356,6 +356,9 @@ static void bindDescriptorSets(MVKImplicitBufferData& target,
+ 	VkShaderStageFlags vkStage = mvkVkShaderStageFlagBitsFromMVKShaderStage(stage);
+ 	for (uint32_t i = 0; i < setCount; i++) {
+ 		MVKDescriptorSet* set = sets[i];
++		// cs2mac: tolerate VK_NULL_HANDLE descriptor sets (VK_KHR_maintenance6 semantics).
++		// Source 2 binds null sets for unused set slots; Mesa/NVIDIA skip them silently.
++		if (!set) { continue; }
+ 		MVKDescriptorSetLayout* setLayout = layout->getDescriptorSetLayout(firstSet + i);
+ 		const MVKShaderStageResourceBinding& offsets = layout->getResourceBindingOffsets(firstSet + i).stages[stage];
+ 		const MVKShaderStageResourceBinding& stride = setLayout->totalResourceCount().stages[stage];
+@@ -550,6 +553,7 @@ static void executeBindOps(id<MTLCommandEncoder> encoder,
+ 	bool didUseResource = false;
+ 	for (const MVKDescriptorBindOperation& op : ops) {
+ 		MVKDescriptorSet* set = common._descriptorSets[op.set];
++		if (!set) { continue; }  // cs2mac: null set bound (see bindDescriptorSets)
+ 		uint32_t target = op.target;
+ 		MVKDescriptorSetLayout* setLayout = common._layout->getDescriptorSetLayout(op.set);
+ 		const MVKDescriptorBinding& binding = setLayout->bindings()[op.bindingIdx];
+@@ -645,6 +649,7 @@ static void bindMetalResources(id<MTLCommandEncoder> encoder,
+ 		MVKDescriptorSet* set = common._descriptorSets[idx];
+ 		const MVKDescriptorSetLayout* layout = common._layout->getDescriptorSetLayout(idx);
+ 		bindings.descriptorSetResourceUse[idx].resizeAndClear(layout->bindings().size());
++		if (!set) { continue; }  // cs2mac: null set bound (see bindDescriptorSets)
+ 		bindBuffer(encoder, set->gpuBufferObject, set->gpuBufferOffset, idx, exists, bindings, binder);
+ 	}
+ 

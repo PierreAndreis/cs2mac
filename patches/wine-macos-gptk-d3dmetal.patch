@@ -1,0 +1,267 @@
+--- a/dlls/winemac.drv/Makefile.in	2026-09-04 12:15:01
++++ b/dlls/winemac.drv/Makefile.in	2026-09-12 12:44:40
+@@ -30,6 +30,8 @@
+ 	dllmain.c \
+ 	event.c \
+ 	gdi.c \
++	gptk.c \
++	gptk_cocoa.m \
+ 	image.c \
+ 	keyboard.c \
+ 	macdrv_main.c \
+--- a/dlls/winemac.drv/macdrv.h	2026-09-04 12:15:01
++++ b/dlls/winemac.drv/macdrv.h	2026-09-12 12:55:09
+@@ -203,6 +203,7 @@
+ extern BOOL macdrv_client_surface_acquire_metal_swapchain(struct macdrv_client_surface *surface);
+ 
+ extern struct macdrv_win_data *get_win_data(HWND hwnd);
++extern BOOL gptk_owns_client_view(macdrv_view view);
+ extern void release_win_data(struct macdrv_win_data *data);
+ extern void init_win_context(void);
+ extern macdrv_window macdrv_get_cocoa_window(HWND hwnd, BOOL require_on_screen);
+--- a/dlls/winemac.drv/surface.c	2026-09-04 12:15:01
++++ b/dlls/winemac.drv/surface.c	2026-09-12 12:55:09
+@@ -126,7 +126,7 @@
+      * content in the window_surface */
+     if ((data = get_win_data(window_surface->hwnd)))
+     {
+-        if (data->client_view)
++        if (data->client_view && !gptk_owns_client_view(data->client_view))
+         {
+             macdrv_set_view_hidden(data->client_view, TRUE);
+             data->client_view = NULL;
+--- /dev/null	2026-09-12 12:59:54
++++ b/dlls/winemac.drv/gptk.c	2026-09-12 12:55:09
+@@ -0,0 +1,161 @@
++/*
++ * Compatibility table for Apple's Game Porting Toolkit D3DMetal layer.
++ *
++ * libd3dshared.dylib resolves a data symbol named "macdrv_functions" with
++ * dlsym(RTLD_DEFAULT) and expects a table of 24 function pointers matching
++ * the winemac.drv that ships with GPTK (a Wine 7.7 derivative). This file
++ * recreates that table on top of the Wine 11 winemac.drv internals so the
++ * D3DMetal swapchain can attach a CAMetalLayer to a Wine window.
++ *
++ * Only slots 0-9 are used by libd3dshared; the remaining win32 helper slots
++ * are left NULL.
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#include <pthread.h>
++#include <stdlib.h>
++
++#include "macdrv.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(gptk);
++
++/* Layout expected by libd3dshared: the client cocoa view is read at +0x18. */
++struct gptk_win_data
++{
++    HWND hwnd;
++    macdrv_window cocoa_window;
++    macdrv_view cocoa_view;
++    macdrv_view client_cocoa_view;
++    struct macdrv_win_data *data;
++};
++
++extern void OnMainThread(void *block);
++extern void macdrv_gptk_dump_metal_view(macdrv_metal_view v);
++
++static macdrv_metal_view gptk_view_create_metal_view(macdrv_view view, macdrv_metal_device device)
++{
++    macdrv_metal_view mv = macdrv_view_create_metal_view(view, device);
++    TRACE("view %p device %p -> metal view %p\n", view, device, mv);
++    macdrv_gptk_dump_metal_view(mv);
++    return mv;
++}
++
++/* Client views created for D3DMetal. The GDI surface flush in surface.c hides
++ * the window's client view so a stale swapchain view does not occlude GDI
++ * content; D3DMetal never re-presents through winemac, so its views must be
++ * exempt from that or the game renders into an invisible layer. */
++static macdrv_view gptk_views[16];
++static pthread_mutex_t gptk_views_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static void gptk_track_view(macdrv_view view)
++{
++    unsigned int i;
++
++    pthread_mutex_lock(&gptk_views_lock);
++    for (i = 0; i < ARRAY_SIZE(gptk_views); i++)
++    {
++        if (gptk_views[i] == view) break;
++        if (!gptk_views[i])
++        {
++            gptk_views[i] = view;
++            break;
++        }
++    }
++    pthread_mutex_unlock(&gptk_views_lock);
++    if (i == ARRAY_SIZE(gptk_views)) WARN("too many D3DMetal client views, %p not tracked\n", view);
++}
++
++BOOL gptk_owns_client_view(macdrv_view view)
++{
++    unsigned int i;
++    BOOL owned = FALSE;
++
++    pthread_mutex_lock(&gptk_views_lock);
++    for (i = 0; i < ARRAY_SIZE(gptk_views) && gptk_views[i]; i++)
++        if (gptk_views[i] == view) owned = TRUE;
++    pthread_mutex_unlock(&gptk_views_lock);
++    return owned;
++}
++
++static void gptk_init(int flag)
++{
++    UINT paths = 0, modes = 0;
++
++    TRACE("flag %d\n", flag);
++    NtUserGetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &paths, &modes);
++}
++
++/* Make sure the window has a client view D3DMetal can render into. The
++ * surface reference is intentionally kept for the lifetime of the process:
++ * it must outlive every swapchain D3DMetal creates for the window. */
++static void gptk_ensure_client_view(HWND hwnd)
++{
++    struct macdrv_win_data *data;
++    struct client_surface *surface;
++    BOOL has_view;
++
++    if (!(data = get_win_data(hwnd))) return;
++    has_view = data->client_view != NULL;
++    release_win_data(data);
++    if (has_view) return;
++
++    surface = macdrv_CreateClientSurface(hwnd, 0, FALSE);
++    TRACE("created client surface %p for hwnd %p\n", surface, hwnd);
++}
++
++static void *gptk_get_win_data(HWND hwnd)
++{
++    struct macdrv_win_data *data;
++    struct gptk_win_data *w;
++
++    gptk_ensure_client_view(hwnd);
++
++    if (!(data = get_win_data(hwnd)))
++    {
++        WARN("no win data for hwnd %p\n", hwnd);
++        return NULL;
++    }
++    if (!(w = calloc(1, sizeof(*w))))
++    {
++        release_win_data(data);
++        return NULL;
++    }
++    gptk_track_view(data->client_view);
++    macdrv_set_view_hidden(data->client_view, FALSE);
++    w->hwnd = hwnd;
++    w->cocoa_window = data->cocoa_window;
++    w->cocoa_view = data->client_view;
++    w->client_cocoa_view = data->client_view;
++    w->data = data;
++    TRACE("hwnd %p window %p client view %p\n", hwnd, w->cocoa_window, w->client_cocoa_view);
++    return w;
++}
++
++static void gptk_release_win_data(struct gptk_win_data *w)
++{
++    if (!w) return;
++    release_win_data(w->data);
++    free(w);
++}
++
++DECLSPEC_EXPORT void *macdrv_functions[24] =
++{
++    gptk_init,                       /* 0 */
++    gptk_get_win_data,               /* 1 */
++    gptk_release_win_data,           /* 2 */
++    macdrv_get_cocoa_window,         /* 3 */
++    macdrv_create_metal_device,      /* 4 */
++    macdrv_release_metal_device,     /* 5 */
++    gptk_view_create_metal_view,     /* 6 */
++    macdrv_view_get_metal_layer,     /* 7 */
++    macdrv_view_release_metal_view,  /* 8 */
++    OnMainThread,                    /* 9 */
++    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
++    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
++};
+--- /dev/null	2026-09-12 12:59:54
++++ b/dlls/winemac.drv/gptk_cocoa.m	2026-09-12 12:55:09
+@@ -0,0 +1,68 @@
++/*
++ * Cocoa-side helpers for the GPTK D3DMetal compatibility table (gptk.c).
++ */
++
++#import <AppKit/AppKit.h>
++#import <QuartzCore/QuartzCore.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++#include "macdrv_cocoa.h"
++#include "cocoa_event.h"
++
++static int gptk_debug(void)
++{
++    static int debug = -1;
++    if (debug < 0) debug = getenv("CS2MAC_GPTK_DEBUG") != NULL;
++    return debug;
++}
++
++static void dump_layer(CALayer *layer, int depth)
++{
++    fprintf(stderr, "gptk: %*s layer %s %p frame=%s hidden=%d opacity=%.2f zpos=%.1f contents=%p bg=%p\n", depth * 2, "",
++            [[layer className] UTF8String], layer, [NSStringFromRect(NSRectFromCGRect(layer.frame)) UTF8String],
++            layer.isHidden, layer.opacity, layer.zPosition, layer.contents, layer.backgroundColor);
++    for (CALayer *sub in layer.sublayers) dump_layer(sub, depth + 1);
++}
++
++static void dump_view(NSView *view, int depth)
++{
++    fprintf(stderr, "gptk: %*s view %s %p frame=%s hidden=%d wantsLayer=%d layer=%p alpha=%.2f\n", depth * 2, "",
++            [[view className] UTF8String], view, [NSStringFromRect(view.frame) UTF8String], view.isHidden,
++            view.wantsLayer, view.layer, view.alphaValue);
++    for (NSView *sub in view.subviews) dump_view(sub, depth + 1);
++}
++
++/* Dump the view / layer state D3DMetal is about to render into. */
++void macdrv_gptk_dump_metal_view(macdrv_metal_view v)
++{
++    NSView *view = (NSView *)v;
++    __block NSString *desc;
++
++    if (!gptk_debug()) return;
++    OnMainThread(^{
++        CALayer *layer = view.layer;
++        desc = [[NSString stringWithFormat:@"view=%@ frame=%@ hidden=%d window=%p onscreen=%d superview=%@ superframe=%@ superhidden=%d layer=%@ bounds=%@ scale=%.1f drawable=%@",
++                 [view className], NSStringFromRect(view.frame), view.isHiddenOrHasHiddenAncestor, view.window, view.window.isVisible,
++                 [view.superview className], NSStringFromRect(view.superview.frame), view.superview.isHidden,
++                 [layer className], NSStringFromRect(NSRectFromCGRect(layer.bounds)), layer.contentsScale,
++                 [layer isKindOfClass:[CAMetalLayer class]] ? NSStringFromSize(NSSizeFromCGSize(((CAMetalLayer *)layer).drawableSize)) : @"n/a"] retain];
++    });
++    fprintf(stderr, "gptk: %s\n", [desc UTF8String]);
++    [desc release];
++    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
++        NSWindow *window = view.window;
++        fprintf(stderr, "gptk: window %p visible=%d alpha=%.2f opaque=%d level=%ld frame=%s occlusion=%lu childWindows=%lu\n", window, window.isVisible,
++                window.alphaValue, window.isOpaque, (long)window.level, [NSStringFromRect(window.frame) UTF8String],
++                (unsigned long)window.occlusionState, (unsigned long)window.childWindows.count);
++        dump_view(window.contentView, 1);
++        dump_layer(window.contentView.layer, 1);
++        if ([view.layer isKindOfClass:[CAMetalLayer class]])
++        {
++            CAMetalLayer *ml = (CAMetalLayer *)view.layer;
++            fprintf(stderr, "gptk: metal layer drawableSize=%s pixelFormat=%lu fbOnly=%d device=%p displaySync=%d maxDrawables=%lu\n",
++                    [NSStringFromSize(NSSizeFromCGSize(ml.drawableSize)) UTF8String], (unsigned long)ml.pixelFormat, ml.framebufferOnly,
++                    ml.device, ml.displaySyncEnabled, (unsigned long)ml.maximumDrawableCount);
++        }
++    });
++}
