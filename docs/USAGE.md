@@ -110,7 +110,15 @@ Joins CT with god mode, gives an AK-47 with infinite ammo and fires eight 4 s bu
 `cl_showfps 2`, printing per-phase medians and the worst frame time. The summary names the adapter
 CS2 reported so a run on the wrong backend is obvious.
 
-## 5. Other
+## 5. Game Mode, crash windows, friends list
+
+- **Game Mode** needs fullscreen: `CS2MAC_FULLSCREEN=1 ./cs2mac play`. A controller icon appears in
+  the menu bar. It needs the `gamemode` setup step (done by a full `setup.sh`).
+- **"Program error" / Wine Debugger windows** came from the Steam overlay helper crashing after CS2
+  quits. Setup disables the overlay for CS2 (`setup.sh steamcfg`, run with Steam stopped) and turns
+  off Wine's crash dialog; `./cs2mac stop` also kills the helper.
+
+## 6. Other
 
 ```sh
 ./cs2mac status        # what is installed, what backend the prefix is on

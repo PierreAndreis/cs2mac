@@ -8,7 +8,13 @@ export WINEPREFIX="${WINEPREFIX:-$CS2MAC_HOME/prefix}"
 
 # Wine 11.17 (gcenx build, wow64, bundles MoltenVK) unpacked by scripts/setup.sh
 export WINE_ROOT="${WINE_ROOT:-$CS2MAC_ROOT/vendor/wine-11.17/Wine Devel.app/Contents/Resources/wine}"
-export WINE="${WINE:-$WINE_ROOT/bin/wine}"
+# vendor/CS2.app wraps the Wine loader in a bundle that declares the games category, so macOS
+# turns on Game Mode for fullscreen CS2 (setup.sh step "gamemode"). Falls back to the stock loader.
+if [ -x "$CS2MAC_ROOT/vendor/CS2.app/Contents/MacOS/wine" ]; then
+    export WINE="${WINE:-$CS2MAC_ROOT/vendor/CS2.app/Contents/MacOS/wine}"
+else
+    export WINE="${WINE:-$WINE_ROOT/bin/wine}"
+fi
 export WINESERVER="${WINESERVER:-$WINE_ROOT/bin/wineserver}"
 
 # Apple Game Porting Toolkit (only needed for the d3dmetal backend)

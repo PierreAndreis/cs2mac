@@ -78,8 +78,24 @@ hidden while the layer had a perfectly good frame in it. The flush now skips vie
 The patched PE DLLs go into Wine's `x86_64-windows` and the prefix's `system32`; the Unix side is
 symlinked in place of `dxgi.so` and `d3d11.so` in `x86_64-unix`, together with
 `D3DMetal.framework`. Registry overrides force `d3d11`/`dxgi` to "builtin" so Wine picks these up.
-`RetinaMode` must be off: `libd3dshared` sizes its drawable from the view frame in points, so on a
-2x display it would render at quarter resolution and get stretched.
+`RetinaMode` is on. Early builds rendered at quarter resolution with it, but with the finished
+shim the layer gets `contentsScale` 2 and a drawable in pixels (a 1152x648 point window renders
+2304x1296 pixels), so output is sharp.
+
+## Apple Silicon without Rosetta?
+
+Not possible today. `cs2.exe` and Valve's DLLs are x86_64 only, and so are Apple's D3DMetal
+libraries (`libd3dshared.dylib`, `D3DMetal.framework`). An arm64 Wine would need its own x86
+emulator (FEX, box64) for the game code, which is slower than Rosetta 2 and would lose D3DMetal.
+Everything that can be native already is: Metal, MetalFX, the GPU driver and the window server.
+
+## Game Mode
+
+macOS turns Game Mode on for the frontmost fullscreen app whose bundle declares a games
+`LSApplicationCategoryType`. The stock Wine loader is a bare executable with no bundle, so macOS
+never sees a game. `setup.sh gamemode` builds the loader and wraps it in `vendor/CS2.app`
+(`io.github.cs2mac.wine`, category action-games, `LSSupportsGameMode`), and `bin/wine` points at it.
+Run fullscreen (`CS2MAC_FULLSCREEN=1`) to get it.
 
 ## Why not just use the GPTK's own Wine?
 

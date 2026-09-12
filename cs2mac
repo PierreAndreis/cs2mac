@@ -70,7 +70,7 @@ case "$cmd" in
     echo "backend:   $(prefix_backend) in prefix (default for play/bench: $DEFAULT_BACKEND)" ;;
   stop)
     pkill -9 -f "^cs2.exe" 2>/dev/null || true
-    pkill -f "steam.exe" 2>/dev/null || true
+    pkill -f "steam.exe|gameoverlayui64" 2>/dev/null || true
     "$WINESERVER" -k 2>/dev/null || true
     echo stopped ;;
   help|-h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;

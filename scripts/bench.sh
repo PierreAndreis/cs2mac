@@ -1,16 +1,16 @@
 #!/bin/bash
 # Repeatable CS2 benchmark: loads the "CS2 FPS BENCHMARK DUST2" workshop addon (de_dust2 + bots),
 # stands still at spawn and samples the cl_showfps overlay via OCR every 5 s.
-# Usage: bench.sh <backend> [seconds] [WxH]   -> build/bench/<backend>-<WxH>-<ts>.{csv,txt}
+# Usage: bench.sh <backend> [seconds] [WxH] [cs2 args...]   -> build/bench/<backend>-<WxH>-<ts>.{csv,txt}
 set -u
-backend="${1:?backend}"; dur="${2:-120}"; res="${3:-1280x720}"
+backend="${1:?backend}"; dur="${2:-120}"; res="${3:-1280x720}"; shift $(( $# > 3 ? 3 : $# ))
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export CS2MAC_BACKEND="$backend" CS2MAC_WIDTH="${res%x*}" CS2MAC_HEIGHT="${res#*x}"
 source "$ROOT/scripts/env.sh"
 ts=$(date +%Y%m%d-%H%M%S); out="$ROOT/build/bench/$backend-$res-$ts"; mkdir -p "$ROOT/build/bench"
 pkill -f "^cs2.exe" 2>/dev/null; sleep 3
 : > "$CS2_DIR/game/csgo/console.log"
-"$ROOT/scripts/run-cs2.sh" +cl_showfps 2 +fps_max 0 +map_workshop 3240880604 de_dust2 > "$out.log" 2>&1 &
+"$ROOT/scripts/run-cs2.sh" +cl_showfps 2 +fps_max 0 +map_workshop 3240880604 de_dust2 "$@" > "$out.log" 2>&1 &
 launcher=$!
 echo "[bench] backend=$backend res=$res waiting for map load"
 for i in $(seq 1 240); do

@@ -2,7 +2,7 @@
 # One-shot setup for cs2mac. Idempotent: every step checks for its output first.
 #
 #   setup.sh            run every step
-#   setup.sh <step>...  run only the named steps (deps wine dxvk moltenvk ntdll winemac gptk tools prefix steam)
+#   setup.sh <step>...  run only the named steps (deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam steamcfg)
 #
 # Nothing proprietary is redistributed: Wine, DXVK and MoltenVK are fetched from
 # their upstream releases, Steam from Valve, and D3DMetal comes from Apple's
@@ -114,6 +114,31 @@ step_gptk() {
     bash "$ROOT/scripts/build-d3dmetal-shim.sh" > "$LOGS/build-d3dmetal-shim.log" 2>&1
 }
 
+step_gamemode() {
+    log "vendor/CS2.app: Wine loader in a bundle with the games category (macOS Game Mode)"
+    local app="$V/CS2.app" u="$WINE_ROOT/lib/wine/x86_64-unix"
+    [ -x "$app/Contents/MacOS/wine" ] && return
+    step_winesrc
+    (cd "$V/wine-build" && PATH="/opt/homebrew/opt/bison/bin:$PATH" x86 make loader/wine > "$LOGS/wine-make-loader.log" 2>&1)
+    mkdir -p "$app/Contents/MacOS"
+    cp "$ROOT/patches/CS2.app-Info.plist" "$app/Contents/Info.plist"
+    cp "$V/wine-build/loader/wine" "$app/Contents/MacOS/wine"
+    # the loader looks for ntdll.so next to itself
+    ln -sf "$u/ntdll.so" "$app/Contents/MacOS/ntdll.so"
+    sign "$app"
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
+    # programs Wine starts through bin/wine (winedbg, services) get the same identity
+    [ -L "$WINE_ROOT/bin/wine" ] || mv "$WINE_ROOT/bin/wine" "$WINE_ROOT/bin/wine.gcenx"
+    ln -sfn "$app/Contents/MacOS/wine" "$WINE_ROOT/bin/wine"
+}
+
+step_steamcfg() {
+    log "Steam: disable the in-game overlay for CS2 (its orphaned helper crashes under Wine)"
+    for f in "$STEAM_DIR"/userdata/*/config/localconfig.vdf; do
+        [ -f "$f" ] && python3 "$ROOT/scripts/steam-no-overlay.py" "$f"
+    done
+}
+
 step_tools() {
     log "screenshot/OCR helpers used by the benchmark (Swift, Vision framework)"
     for t in winshot winlist fpsread wininput; do
@@ -124,9 +149,11 @@ step_tools() {
 step_prefix() {
     log "Wine prefix at $WINEPREFIX"
     [ -f "$WINEPREFIX/system.reg" ] || WINEDEBUG=-all "$WINE" wineboot -u > "$LOGS/wineboot.log" 2>&1
-    # Native Cocoa window decorations render at 1x; Retina mode doubles the Wine desktop, which
-    # the D3DMetal presentation path cannot follow (see docs/TUNING.md).
-    "$WINE" reg add 'HKCU\Software\Wine\Mac Driver' /v RetinaMode /t REG_SZ /d n /f >/dev/null
+    # Retina on: CS2 renders at full panel pixels (a 1280x720 request becomes 2560x1440 pixels on a
+    # 2x display). See docs/TUNING.md for the Retina benchmark.
+    "$WINE" reg add 'HKCU\Software\Wine\Mac Driver' /v RetinaMode /t REG_SZ /d y /f >/dev/null
+    # Crashing helpers (the Steam overlay after CS2 exits) must not open Wine Debugger windows.
+    "$WINE" reg add 'HKCU\Software\Wine\WineDbg' /v ShowCrashDialog /t REG_DWORD /d 0 /f >/dev/null
     "$WINE" reg add 'HKCU\Software\Wine\Mac Driver' /v AllowSetGamma /t REG_DWORD /d 0 /f >/dev/null
     "$WINE" reg add 'HKCU\Software\Wine' /v Version /t REG_SZ /d win10 /f >/dev/null
     "$WINESERVER" -w
@@ -141,6 +168,6 @@ step_steam() {
     [ -f "$STEAM_DIR/steam.exe" ] || { echo "Steam installer did not produce steam.exe, see $LOGS/steam-install.log"; exit 1; }
 }
 
-steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(deps wine dxvk moltenvk ntdll winemac gptk tools prefix steam)
+steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam steamcfg)
 for s in "${steps[@]}"; do "step_$s"; done
 log "done. Next: ./cs2mac steam (log in, install Counter-Strike 2), then ./cs2mac play"

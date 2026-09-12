@@ -7,7 +7,7 @@ What was tried, what mattered, and what did not. Numbers are in `docs/RESULTS.md
 | knob | where | effect |
 |------|-------|--------|
 | backend `d3dmetal` | `./cs2mac play d3dmetal` | best median, best p5 and shortest load stalls, see RESULTS |
-| `RetinaMode = n` | prefix registry, set by setup | required for d3dmetal (drawable size in points); also halves work for the others on a 2x display |
+| `RetinaMode = y` | prefix registry, set by setup | full pixel resolution on Retina displays; set `n` to trade sharpness for fps |
 | MoltenVK 1.4.3 + null descriptor patch | `vendor/MoltenVK`, installed into Wine | vulkan/dxvk run at all (present_wait2, no crash on map load) |
 | `WINEESYNC=1 WINEMSYNC=1` | `scripts/env.sh` | fewer wineserver round trips for synchronisation; msync is the macOS native one and is used when available |
 | `-windowed -w 1280 -h 720` | `run-cs2.sh` | fullscreen on Wine's Mac driver changes the display mode and is slower to alt-tab; the window can be resized in the game's settings |
@@ -37,7 +37,7 @@ CPU/translation bound there, not GPU bound.
   exits; the real fix was the MoltenVK upgrade.
 - **DXVK async shader compilation**: the "async" build is already used; the stalls are pipeline
   creation inside MoltenVK, not DXVK's state cache.
-- **Retina on with d3dmetal**: quarter-resolution drawable, blurry and not faster.
+- **Retina on with d3dmetal**: sharp since the finished shim (was quarter resolution in early builds).
 - **wined3d** (stock Wine, OpenGL): loads the menu, single-digit fps in a map. Kept as the
   fallback backend because it needs nothing extra.
 
@@ -81,3 +81,17 @@ Findings:
 
 To warm the shader cache before a real match, load Aim Botz once and fire every weapon you plan to
 use: `./cs2mac play d3dmetal 1280x720 +map_workshop 3070244462 aim_botz`.
+
+## Retina (2026-09-12)
+
+d3dmetal, `RetinaMode=y`, 2x external display, Dust2 benchmark map, 90 s each. The window is
+clamped to the screen in points, so the pixel size is what the GPU renders.
+
+| Rendered pixels | median fps | 5th percentile fps | worst frame ms |
+|---|---|---|---|
+| 2304x1296 | 86.4 | 59.7 | 234.6 |
+| 2304x1296 with FSR | 83.0 | 58.7 | 74.7 |
+| 1920x1080 | 109.8 | 80.0 | 54.9 |
+| 1280x720 | 116.8 | 113.3 | 1031.6 |
+
+The GPU is the limit above 1080p; at 720p the CPU (Rosetta) is. For competitive play pick 1920x1080.
