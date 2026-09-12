@@ -76,10 +76,39 @@ but not while CS2 runs.
 ./cs2mac bench all 120 1280x720    # d3dmetal, dxvk and vulkan back to back
 ```
 
-The benchmark loads the "CS2 FPS BENCHMARK" workshop map (id 3240880604, subscribe to it once in
-Steam or let SteamCMD fetch it), stands at spawn with `cl_showfps 2` on, and reads the overlay
-with the Vision OCR every 5 seconds. Each run leaves `build/bench/<backend>-<res>-<time>.csv`
-(samples), `.txt` (summary) and a few PNG frames. `docs/RESULTS.md` explains how to read them.
+The benchmark loads the "CS2 FPS BENCHMARK" workshop map (id 3240880604, see the next section),
+stands at spawn with `cl_showfps 2` on, and reads the overlay with the Vision OCR every 5 seconds.
+Each run leaves `build/bench/<backend>-<res>-<time>.csv` (samples), `.txt` (summary) and a few PNG
+frames. `docs/RESULTS.md` explains how to read them.
+
+### Workshop maps
+
+Subscribing from the Steam client inside Wine is clumsy, so `scripts/workshop.sh` fetches items
+with SteamCMD and registers them in the prefix's Steam workshop manifest. The registration is what
+makes CS2 mount the map vpk nested inside the addon: a bare copy of the files under
+`csgo/maps/workshop/<id>/` gets you `Failed to mount world vpk file`, and an extracted map vpk
+fails the signature check unless the game runs with `-insecure` (which tints the screen purple).
+
+```sh
+./cs2mac stop                                  # Steam rewrites the manifest on exit, so stop it first
+bash scripts/workshop.sh 3240880604 3070244462 # FPS benchmark flythrough + Aim Botz
+./cs2mac steam -login <user>
+./cs2mac play d3dmetal 1280x720 +map_workshop 3070244462 aim_botz
+```
+
+SteamCMD logs in anonymously; if an item refuses that, set `STEAMCMD_LOGIN="user password"` for the
+call (the value only reaches the SteamCMD process).
+
+### Frame times while shooting
+
+```sh
+bash scripts/shoot-test.sh d3dmetal 1280x720            # needs Aim Botz installed as above
+SHOOT_TAG=nosound bash scripts/shoot-test.sh d3dmetal 1280x720 -nosound
+```
+
+Joins CT with god mode, gives an AK-47 with infinite ammo and fires eight 4 s bursts while sampling
+`cl_showfps 2`, printing per-phase medians and the worst frame time. The summary names the adapter
+CS2 reported so a run on the wrong backend is obvious.
 
 ## 5. Other
 

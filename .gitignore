@@ -10,3 +10,4 @@ bench/results/*.trace
 scripts/fpsread
 scripts/winshot
 scripts/winlist
+scripts/wininput
