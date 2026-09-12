@@ -49,3 +49,35 @@ d3dmetal backend wins because it translates D3D11 to Metal in one step; dxvk and
 Vulkan first and MoltenVK then re-translates. Running Wine's Unix side native arm64 (Wine's
 `--enable-archs` with an arm64 host build) would remove Rosetta from the Unix half but not from
 the game itself; it is the next thing worth trying.
+
+## Frame drops while shooting (2026-09-12)
+
+Measured with `scripts/shoot-test.sh` (Aim Botz, AK-47 bursts, M2 Max, 1280x720, one run per row).
+
+| run | idle f60 median | shooting f60 median / min | worst frame ms while shooting |
+|---|---|---|---|
+| d3dmetal | 120 | 118 / 86 | 94 |
+| dxvk | 118 | 117 / 112 | 1552 |
+| d3dmetal -nosound | 114 | 115 / 105 | 344 |
+| d3dmetal D3DM_ENABLE_ASYNC_COMMIT=1 | 120 | 119 / 93 | 99 |
+| d3dmetal D3DM_MULTITHREADED_INTERFACE_ENABLE=1 | 113 | 109 / 84 | 71 |
+| de_dust2 with bots, d3dmetal | 111 | 113 / 88 | 57 |
+| de_dust2 without bots, d3dmetal | 114 | 116 / 61 | 175 |
+
+Findings:
+
+- The big drops (30 to 45 fps for several seconds) only showed on the very first shooting session
+  on a fresh shader cache. Later sessions on the same map stayed within about 10% of idle. That
+  matches D3DMetal compiling pipelines the first time muzzle flash, tracer and impact effects
+  appear; the result is cached on disk, so it gets better after one session.
+- None of sound, bots, async commit or the multithreaded interface changed the steady-state
+  numbers beyond run-to-run noise. Async commit had the best single run but did not hold up on
+  repeats, so it stays off by default.
+- DXVK keeps a similar median but has second-long hitches (worst frame 0.8 to 1.5 s), so d3dmetal
+  stays the default.
+- Background load matters more than any knob: a busy Chrome GPU helper and a dev server pulled
+  repeat runs down to 80 to 100 fps with 250+ ms spikes, idle included. Close them before playing
+  or benchmarking.
+
+To warm the shader cache before a real match, load Aim Botz once and fire every weapon you plan to
+use: `./cs2mac play d3dmetal 1280x720 +map_workshop 3070244462 aim_botz`.

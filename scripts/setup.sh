@@ -116,7 +116,7 @@ step_gptk() {
 
 step_tools() {
     log "screenshot/OCR helpers used by the benchmark (Swift, Vision framework)"
-    for t in winshot winlist fpsread; do
+    for t in winshot winlist fpsread wininput; do
         [ "$ROOT/scripts/$t" -nt "$ROOT/scripts/$t.swift" ] || swiftc -O -o "$ROOT/scripts/$t" "$ROOT/scripts/$t.swift"
     done
 }
