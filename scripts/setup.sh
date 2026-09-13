@@ -74,6 +74,7 @@ step_winesrc() {
     (cd "$V/wine-build" &&
         patch -p1 < "$ROOT/patches/wine-macos-single-gsbase.patch" &&
         patch -p1 < "$ROOT/patches/wine-macos-gptk-d3dmetal.patch" &&
+        patch -p1 < "$ROOT/patches/wine-fast-udp-sockets.patch" &&
         PATH="/opt/homebrew/opt/bison/bin:$PATH" CC="clang -arch x86_64" \
         LDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib" CPPFLAGS="-I/opt/homebrew/opt/openssl@1.1/include" \
         x86 ./configure --enable-archs=x86_64,i386 --without-x --disable-tests --without-freetype \
@@ -91,8 +92,11 @@ build_unix_lib() { # <make target dir> <so name>
 }
 
 step_ntdll() {
-    log "ntdll.so with the single-gsbase patch (needed by D3DMetal, harmless for the others)"
+    log "ntdll.so with the single-gsbase (needed by D3DMetal) and fast UDP socket patches"
     step_winesrc
+    # Older build trees predate the fast UDP socket patch; apply it once.
+    grep -q sock_fast_path "$V/wine-build/dlls/ntdll/unix/socket.c" ||
+        (cd "$V/wine-build" && patch -p1 < "$ROOT/patches/wine-fast-udp-sockets.patch")
     build_unix_lib ntdll ntdll.so
 }
 
