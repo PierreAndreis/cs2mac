@@ -21,7 +21,11 @@ res=(-w "${CS2MAC_WIDTH:-1280}" -h "${CS2MAC_HEIGHT:-720}")
 mode=(-windowed -noborder)
 [ "${CS2MAC_WINDOWED:-0}" = 1 ] && mode=(-windowed)
 [ "${CS2MAC_FULLSCREEN:-0}" = 1 ] && mode=(-fullscreen)
-args=("${api[@]}" -nojoy -novid -condebug "${res[@]}" "${mode[@]}" "$@")
+# Cap fps at the main display's refresh rate: uncapped frames on a 60 Hz panel without vsync are shown
+# unevenly by the compositor and read as stutter. CS2MAC_FPS_MAX=0 uncaps.
+hz="$(system_profiler SPDisplaysDataType 2>/dev/null | awk '/Main Display: Yes/{print last} {if ($0 ~ /@ [0-9.]+Hz/) {sub(/.*@ /,""); sub(/\..*/,""); last=$0}}' | head -1)"
+fps=(+fps_max "${CS2MAC_FPS_MAX:-${hz:-0}}")
+args=("${api[@]}" -nojoy -novid -condebug "${res[@]}" "${mode[@]}" "${fps[@]}" "$@")
 # Launching cs2.exe directly puts it in insecure mode (no VAC servers). By default hand the launch to
 # the running Steam client instead; CS2MAC_DIRECT=1 keeps the direct launch (bench uses it for logs).
 [ "${CS2MAC_DIRECT:-0}" = 1 ] && exec "$WINE" cs2.exe -steam "${args[@]}"
