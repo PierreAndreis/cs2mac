@@ -161,6 +161,9 @@ step_prefix() {
     # Retina on: CS2 renders at full panel pixels (a 1280x720 request becomes 2560x1440 pixels on a
     # 2x display). See docs/TUNING.md for the Retina benchmark.
     "$WINE" reg add 'HKCU\Software\Wine\Mac Driver' /v RetinaMode /t REG_SZ /d y /f >/dev/null
+    # With Retina on, Windows programs draw in pixels; 192 DPI (200%) keeps Steam at a normal size.
+    "$WINE" reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d 192 /f >/dev/null
+    "$WINE" reg add 'HKLM\System\CurrentControlSet\Hardware Profiles\Current\Software\Fonts' /v LogPixels /t REG_DWORD /d 192 /f >/dev/null
     # Crashing helpers (the Steam overlay after CS2 exits) must not open Wine Debugger windows.
     "$WINE" reg add 'HKCU\Software\Wine\WineDbg' /v ShowCrashDialog /t REG_DWORD /d 0 /f >/dev/null
     "$WINE" reg add 'HKCU\Software\Wine\Mac Driver' /v AllowSetGamma /t REG_DWORD /d 0 /f >/dev/null
