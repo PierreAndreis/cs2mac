@@ -58,10 +58,10 @@ Keep Steam running while you play; CS2 refuses to start without it.
 ## 3. Play
 
 ```sh
-./cs2mac play                      # d3dmetal, 1280x720, windowed
-./cs2mac play dxvk 1920x1080
+./cs2mac play                      # d3dmetal, borderless at the main display size
+./cs2mac play dxvk 1920x1080       # borderless window of that size
 ./cs2mac play vulkan 1280x720 +map de_dust2
-CS2MAC_FULLSCREEN=1 ./cs2mac play
+CS2MAC_WINDOWED=1 ./cs2mac play d3dmetal 1280x720   # normal window with a title bar
 ```
 
 The first argument is the backend (`d3dmetal`, `dxvk`, `vulkan`, `wined3d`), the second the
@@ -118,8 +118,8 @@ CS2 reported so a run on the wrong backend is obvious.
   [steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine). `./cs2mac steam` reinstalls it
   after Steam updates.
 
-- **Game Mode** needs fullscreen: `CS2MAC_FULLSCREEN=1 ./cs2mac play`. A controller icon appears in
-  the menu bar. It needs the `gamemode` setup step (done by a full `setup.sh`).
+- **Game Mode** comes from the `vendor/CS2.app` bundle. Don't use `CS2MAC_FULLSCREEN=1` (exclusive
+  fullscreen), it renders black with D3DMetal; the default borderless mode is the way to play. It needs the `gamemode` setup step (done by a full `setup.sh`).
 - **"Program error" / Wine Debugger windows** came from the Steam overlay helper crashing after CS2
   quits. Setup disables the overlay for CS2 (`setup.sh steamcfg`, run with Steam stopped) and turns
   off Wine's crash dialog; `./cs2mac stop` also kills the helper.

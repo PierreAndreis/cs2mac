@@ -78,9 +78,8 @@ hidden while the layer had a perfectly good frame in it. The flush now skips vie
 The patched PE DLLs go into Wine's `x86_64-windows` and the prefix's `system32`; the Unix side is
 symlinked in place of `dxgi.so` and `d3d11.so` in `x86_64-unix`, together with
 `D3DMetal.framework`. Registry overrides force `d3d11`/`dxgi` to "builtin" so Wine picks these up.
-`RetinaMode` is on. Early builds rendered at quarter resolution with it, but with the finished
-shim the layer gets `contentsScale` 2 and a drawable in pixels (a 1152x648 point window renders
-2304x1296 pixels), so output is sharp.
+`RetinaMode` is off. With it on the shim renders sharp at full pixel resolution, but CS2's mouse
+coordinates stop matching its window, so the menus can't be clicked.
 
 ## Apple Silicon without Rosetta?
 
@@ -95,7 +94,8 @@ macOS turns Game Mode on for the frontmost fullscreen app whose bundle declares 
 `LSApplicationCategoryType`. The stock Wine loader is a bare executable with no bundle, so macOS
 never sees a game. `setup.sh gamemode` builds the loader and wraps it in `vendor/CS2.app`
 (`io.github.cs2mac.wine`, category action-games, `LSSupportsGameMode`), and `bin/wine` points at it.
-Run fullscreen (`CS2MAC_FULLSCREEN=1`) to get it.
+Exclusive fullscreen presents black with D3DMetal, so CS2 runs borderless at the display size
+instead (the `play` default).
 
 ## Why not just use the GPTK's own Wine?
 

@@ -11,6 +11,14 @@ case "$CS2MAC_BACKEND" in
   dxvk|wined3d|d3dmetal) api=() ;;
   *) echo "unknown CS2MAC_BACKEND=$CS2MAC_BACKEND"; exit 1 ;;
 esac
+# Default is borderless fullscreen: a window the size of the main display in points. Exclusive
+# fullscreen (CS2MAC_FULLSCREEN=1) presents black with D3DMetal; CS2MAC_WINDOWED=1 gives a normal window.
+if [ -z "${CS2MAC_WIDTH:-}" ] && [ "${CS2MAC_WINDOWED:-0}" != 1 ]; then
+    screen="$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var f=$.NSScreen.mainScreen.frame; f.size.width+"x"+f.size.height')"
+    CS2MAC_WIDTH="${screen%x*}"; CS2MAC_HEIGHT="${screen#*x}"
+fi
 res=(-w "${CS2MAC_WIDTH:-1280}" -h "${CS2MAC_HEIGHT:-720}")
-mode=(-windowed); [ "${CS2MAC_FULLSCREEN:-0}" = 1 ] && mode=(-fullscreen)
+mode=(-windowed -noborder)
+[ "${CS2MAC_WINDOWED:-0}" = 1 ] && mode=(-windowed)
+[ "${CS2MAC_FULLSCREEN:-0}" = 1 ] && mode=(-fullscreen)
 exec "$WINE" cs2.exe -steam "${api[@]}" -nojoy -novid -condebug "${res[@]}" "${mode[@]}" "$@"

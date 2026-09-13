@@ -7,7 +7,7 @@ What was tried, what mattered, and what did not. Numbers are in `docs/RESULTS.md
 | knob | where | effect |
 |------|-------|--------|
 | backend `d3dmetal` | `./cs2mac play d3dmetal` | best median, best p5 and shortest load stalls, see RESULTS |
-| `RetinaMode = y` | prefix registry, set by setup | full pixel resolution on Retina displays; set `n` to trade sharpness for fps |
+| `RetinaMode = n` | prefix registry, set by setup | `y` renders at full Retina pixels but breaks CS2's mouse mapping |
 | MoltenVK 1.4.3 + null descriptor patch | `vendor/MoltenVK`, installed into Wine | vulkan/dxvk run at all (present_wait2, no crash on map load) |
 | `WINEESYNC=1 WINEMSYNC=1` | `scripts/env.sh` | fewer wineserver round trips for synchronisation; msync is the macOS native one and is used when available |
 | `-windowed -w 1280 -h 720` | `run-cs2.sh` | fullscreen on Wine's Mac driver changes the display mode and is slower to alt-tab; the window can be resized in the game's settings |

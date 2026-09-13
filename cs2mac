@@ -54,8 +54,11 @@ case "$cmd" in
     (cd "$STEAM_DIR" && nohup "$WINE" steam.exe -silent -noverifyfiles "$@" > "$ROOT/build/logs/steam.log" 2>&1 &)
     echo "Steam starting (log: build/logs/steam.log). Install Counter-Strike 2 from the library." ;;
   play)
-    b="${1:-$DEFAULT_BACKEND}"; res="${2:-1280x720}"; shift $(( $# > 2 ? 2 : $# ))
+    b="${1:-$DEFAULT_BACKEND}"; res="${2:-native}"; shift $(( $# > 2 ? 2 : $# ))
     need_steam; select_backend "$b"
+    if [ "$res" = native ]; then
+        CS2MAC_BACKEND="$b" exec "$ROOT/scripts/run-cs2.sh" "$@"
+    fi
     CS2MAC_BACKEND="$b" CS2MAC_WIDTH="${res%x*}" CS2MAC_HEIGHT="${res#*x}" exec "$ROOT/scripts/run-cs2.sh" "$@" ;;
   bench)
     b="${1:-$DEFAULT_BACKEND}"; secs="${2:-120}"; res="${3:-1280x720}"
