@@ -5,7 +5,7 @@
 set -u
 backend="${1:?backend}"; dur="${2:-120}"; res="${3:-1280x720}"; shift $(( $# > 3 ? 3 : $# ))
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export CS2MAC_BACKEND="$backend" CS2MAC_WIDTH="${res%x*}" CS2MAC_HEIGHT="${res#*x}"
+export CS2MAC_DIRECT=1 CS2MAC_BACKEND="$backend" CS2MAC_WIDTH="${res%x*}" CS2MAC_HEIGHT="${res#*x}"
 source "$ROOT/scripts/env.sh"
 ts=$(date +%Y%m%d-%H%M%S); out="$ROOT/build/bench/$backend-$res-$ts"; mkdir -p "$ROOT/build/bench"
 pkill -f "^cs2.exe" 2>/dev/null; sleep 3

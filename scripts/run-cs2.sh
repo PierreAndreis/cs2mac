@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch CS2 directly (Steam must already be running and logged in).
+# Launch CS2 through the running, logged in Steam client.
 # Backend comes from CS2MAC_BACKEND (vulkan | dxvk | wined3d | d3dmetal); see scripts/backend.sh.
 # Extra arguments are passed to cs2.exe (e.g. +map de_dust2).
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
@@ -21,4 +21,8 @@ res=(-w "${CS2MAC_WIDTH:-1280}" -h "${CS2MAC_HEIGHT:-720}")
 mode=(-windowed -noborder)
 [ "${CS2MAC_WINDOWED:-0}" = 1 ] && mode=(-windowed)
 [ "${CS2MAC_FULLSCREEN:-0}" = 1 ] && mode=(-fullscreen)
-exec "$WINE" cs2.exe -steam "${api[@]}" -nojoy -novid -condebug "${res[@]}" "${mode[@]}" "$@"
+args=("${api[@]}" -nojoy -novid -condebug "${res[@]}" "${mode[@]}" "$@")
+# Launching cs2.exe directly puts it in insecure mode (no VAC servers). By default hand the launch to
+# the running Steam client instead; CS2MAC_DIRECT=1 keeps the direct launch (bench uses it for logs).
+[ "${CS2MAC_DIRECT:-0}" = 1 ] && exec "$WINE" cs2.exe -steam "${args[@]}"
+exec "$WINE" "$STEAM_DIR/steam.exe" -applaunch 730 "${args[@]}"

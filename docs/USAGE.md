@@ -54,6 +54,8 @@ login window entirely:
 ```
 
 Keep Steam running while you play; CS2 refuses to start without it.
+`play` starts CS2 through Steam so VAC secure servers work; `bench` launches `cs2.exe` directly
+(insecure mode, fine for the offline benchmark map).
 
 ## 3. Play
 
