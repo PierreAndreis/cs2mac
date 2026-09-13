@@ -110,7 +110,13 @@ Joins CT with god mode, gives an AK-47 with infinite ammo and fires eight 4 s bu
 `cl_showfps 2`, printing per-phase medians and the worst frame time. The summary names the adapter
 CS2 reported so a run on the wrong backend is obvious.
 
-## 5. Game Mode, crash windows, friends list
+## 5. Game Mode, crash windows, black Steam
+
+- **Black Steam windows** come from Steam's embedded Chromium (CEF 126) under Wine on macOS. Setup
+  installs a small `steamwebhelper.exe` wrapper (`tools/webhelper`) that runs the real helper with
+  `--disable-gpu --single-process`, the approach from
+  [steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine). `./cs2mac steam` reinstalls it
+  after Steam updates.
 
 - **Game Mode** needs fullscreen: `CS2MAC_FULLSCREEN=1 ./cs2mac play`. A controller icon appears in
   the menu bar. It needs the `gamemode` setup step (done by a full `setup.sh`).

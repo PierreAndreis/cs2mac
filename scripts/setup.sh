@@ -2,7 +2,7 @@
 # One-shot setup for cs2mac. Idempotent: every step checks for its output first.
 #
 #   setup.sh            run every step
-#   setup.sh <step>...  run only the named steps (deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam steamcfg)
+#   setup.sh <step>...  run only the named steps (deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam webhelper steamcfg)
 #
 # Nothing proprietary is redistributed: Wine, DXVK and MoltenVK are fetched from
 # their upstream releases, Steam from Valve, and D3DMetal comes from Apple's
@@ -132,6 +132,15 @@ step_gamemode() {
     ln -sfn "$app/Contents/MacOS/wine" "$WINE_ROOT/bin/wine"
 }
 
+step_webhelper() {
+    log "Steam: steamwebhelper wrapper (CEF with GPU off in one process, fixes black Steam windows)"
+    local cef="$STEAM_DIR/bin/cef/cef.win64" w="$ROOT/tools/webhelper"
+    [ -f "$cef/steamwebhelper_real.exe" ] || mv "$cef/steamwebhelper.exe" "$cef/steamwebhelper_real.exe"
+    [ "$w/steamwebhelper.exe" -nt "$w/steamwebhelper.c" ] ||
+        x86_64-w64-mingw32-gcc -O2 -municode -o "$w/steamwebhelper.exe" "$w/steamwebhelper.c"
+    cmp -s "$w/steamwebhelper.exe" "$cef/steamwebhelper.exe" || cp "$w/steamwebhelper.exe" "$cef/steamwebhelper.exe"
+}
+
 step_steamcfg() {
     log "Steam: disable the in-game overlay for CS2 (its orphaned helper crashes under Wine)"
     for f in "$STEAM_DIR"/userdata/*/config/localconfig.vdf; do
@@ -168,6 +177,6 @@ step_steam() {
     [ -f "$STEAM_DIR/steam.exe" ] || { echo "Steam installer did not produce steam.exe, see $LOGS/steam-install.log"; exit 1; }
 }
 
-steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam steamcfg)
+steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(deps wine dxvk moltenvk ntdll winemac gptk gamemode tools prefix steam webhelper steamcfg)
 for s in "${steps[@]}"; do "step_$s"; done
 log "done. Next: ./cs2mac steam (log in, install Counter-Strike 2), then ./cs2mac play"

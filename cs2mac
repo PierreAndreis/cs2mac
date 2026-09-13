@@ -45,6 +45,12 @@ case "$cmd" in
     # first launch; passing -login on the command line skips the login window, and the store/library
     # pages render once the client is logged in. Extra args are passed through (e.g. -login user).
     mkdir -p "$ROOT/build/logs"
+    # Steam updates replace steamwebhelper.exe; put the wrapper back (and keep the new real helper)
+    cef="$STEAM_DIR/bin/cef/cef.win64"
+    if ! cmp -s "$ROOT/tools/webhelper/steamwebhelper.exe" "$cef/steamwebhelper.exe"; then
+        [ "$(stat -f%z "$cef/steamwebhelper.exe")" -gt 1000000 ] && mv "$cef/steamwebhelper.exe" "$cef/steamwebhelper_real.exe"
+        bash "$ROOT/scripts/setup.sh" webhelper >/dev/null
+    fi
     (cd "$STEAM_DIR" && nohup "$WINE" steam.exe -silent -noverifyfiles "$@" > "$ROOT/build/logs/steam.log" 2>&1 &)
     echo "Steam starting (log: build/logs/steam.log). Install Counter-Strike 2 from the library." ;;
   play)
